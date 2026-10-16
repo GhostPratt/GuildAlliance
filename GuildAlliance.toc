@@ -11,4 +11,5 @@ Core.lua
 Comm.lua
 Roster.lua
 Presence.lua
+GuildSync.lua
 UI.lua

@@ -15,6 +15,7 @@ local DEFAULT_SETTINGS = {
   whoPoll     = true,  -- poll /who g-"Guild" so allied members without the addon still show online
   whoInterval = 90,    -- seconds between who polls (one allied guild per poll)
   onlineOnly  = false, -- window filter
+  keyRankMax  = 1,     -- guild rank index at or below which a member may set the guild's alliance (0 = GM)
 }
 
 -------------------------------------------------------------------------------
@@ -148,7 +149,8 @@ end)
 --   settings = { ... },
 --   realms = {
 --     [realmName] = {
---       chars  = { [charName] = { alliance = { key=, password= } } },
+--       chars  = { [charName] = { alliance = { key=, password= },
+--                                 allianceStamp=, allianceSetBy=, allianceFromGuild= } },
 --       guilds = { [guildName] = { stamp=, at=, source=, own=, ranks={[idx]=name},
 --                                  members = { [name] = { level=, class=, rank=, hours=, seen= } } } },
 --     },
@@ -183,7 +185,21 @@ end
 -------------------------------------------------------------------------------
 -- Alliance configuration
 -------------------------------------------------------------------------------
-function GA:SetAlliance(key, password)
+-- Record who set the alliance and when. meta is nil for a manual change on
+-- this client, or { stamp=, setBy=, fromGuild=true } when received from the guild.
+local function stampAlliance(c, meta)
+  if meta then
+    c.allianceStamp = meta.stamp
+    c.allianceSetBy = meta.setBy
+    c.allianceFromGuild = meta.fromGuild and true or false
+  else
+    c.allianceStamp = math.max(time(), (c.allianceStamp or 0) + 1)
+    c.allianceSetBy = GA.player
+    c.allianceFromGuild = GA.GuildSync:IAmOfficer()
+  end
+end
+
+function GA:SetAlliance(key, password, meta)
   local Comm = self.Comm
   local newName = Comm:ChannelNameForKey(key)
   if not newName then
@@ -192,6 +208,12 @@ function GA:SetAlliance(key, password)
   end
   local c = self:CharDB()
   c.alliance = { key = key, password = password }
+  stampAlliance(c, meta)
+  if not meta and c.allianceFromGuild then
+    self.GuildSync:BroadcastKey()
+    self:Print("you are an officer: this alliance is now set for your whole guild")
+  end
+  self:Fire("ALLIANCE_CHANGED")
   if Comm.joined and Comm.channelName == newName then
     Comm:Configure(key, password)
     self:Print("alliance key unchanged; password updated")
@@ -203,10 +225,16 @@ function GA:SetAlliance(key, password)
   self:Print(string.format("alliance key set to '%s' (channel %s); joining...", key, newName))
 end
 
-function GA:ClearAlliance()
+function GA:ClearAlliance(meta)
   local c = self:CharDB()
   c.alliance = nil
+  stampAlliance(c, meta)
+  if not meta and c.allianceFromGuild then
+    self.GuildSync:BroadcastKey()
+    self:Print("you are an officer: the alliance is cleared for your whole guild")
+  end
   self.Comm:Leave()
+  self:Fire("ALLIANCE_CHANGED")
   self:Print("left the alliance channel; this character no longer belongs to an alliance")
 end
 
@@ -243,6 +271,7 @@ local HELP = {
   "/ga friend <name>        add a player to your real friends list (50 slot cap)",
   "/ga forget <guild>       drop a guild's saved roster",
   "/ga who on|off           toggle /who polling for members without the addon",
+  "/ga officers <rank>      highest rank index allowed to set the guild alliance (0 = GM, default 1)",
   "/ga debug on|off         toggle debug output",
 }
 
@@ -259,6 +288,11 @@ function GA:ShowStatus()
   local key = c.alliance and c.alliance.key or "(none)"
   local state = Comm.joined and "joined" or (Comm.wantJoined and "joining" or "not joined")
   self:Print(string.format("alliance key: %s   channel: %s   state: %s", key, tostring(Comm.channelName or "-"), state))
+  if c.alliance then
+    self:Print(string.format("set by %s (%s); my rank %s, officer: %s",
+      tostring(c.allianceSetBy), c.allianceFromGuild and "for the guild" or "personal",
+      tostring(self.GuildSync:MyRank()), tostring(self.GuildSync:IAmOfficer())))
+  end
   local users, guilds = 0, 0
   for _ in pairs(Presence.channelMembers) do users = users + 1 end
   for _ in pairs(self.realm.guilds) do guilds = guilds + 1 end
@@ -339,6 +373,12 @@ function GA:HandleSlash(msg)
       self.settings.whoPoll = false
     end
     self:Print("who polling is " .. (self.settings.whoPoll and "on" or "off"))
+  elseif cmd == "officers" then
+    local n = tonumber(rest)
+    if n and n >= 0 and n <= 9 then
+      self.settings.keyRankMax = math.floor(n)
+    end
+    self:Print("members with guild rank index <= " .. self.settings.keyRankMax .. " can set the guild alliance (0 = guild master)")
   elseif cmd == "debug" then
     if rest == "on" then
       self.settings.debug = true
@@ -368,6 +408,7 @@ GA:RegisterEvent("PLAYER_LOGIN", function()
   GA.Comm:Init()
   GA.Roster:Init()
   GA.Presence:Init()
+  GA.GuildSync:Init()
   GA.UI:Init()
   local c = GA:CharDB()
   if c.alliance and c.alliance.key then
@@ -379,6 +420,7 @@ end)
 GA:RegisterEvent("PLAYER_ENTERING_WORLD", function()
   if enteredWorld then return end
   enteredWorld = true
+  GA:Fire("ENTERED_WORLD")
   -- Channels cannot be joined reliably until a few seconds after entering the world.
   GA:After(6, function()
     local c = GA:CharDB()

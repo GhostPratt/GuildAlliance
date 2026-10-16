@@ -150,9 +150,14 @@ function UI:Refresh()
   local state = Comm.joined and "|cff40ff40connected|r"
     or (Comm.wantJoined and "|cffffff40joining...|r" or "|cffff4040not connected|r")
   if c.alliance and c.alliance.key then
-    statusLine1:SetText("Alliance |cffffffff" .. c.alliance.key .. "|r   " .. state)
+    local origin = c.allianceFromGuild
+      and ("guild, set by " .. tostring(c.allianceSetBy or "?"))
+      or "personal"
+    statusLine1:SetText("Alliance |cffffffff" .. c.alliance.key .. "|r   " .. state .. "   |cffaaaaaa(" .. origin .. ")|r")
+  elseif GA.GuildSync:IAmOfficer() then
+    statusLine1:SetText("No alliance. As an officer, the key you join here is shared with your whole guild.")
   else
-    statusLine1:SetText("No alliance. Enter the key your allies agreed on and press Join.")
+    statusLine1:SetText("No alliance. Your guild's officers can set one; it arrives automatically at login.")
   end
   statusLine2:SetText(string.format("Allied guilds: %d   Online: %d   Addon users in channel: %d", guilds, online, users))
 
@@ -260,6 +265,21 @@ local function makeButton(name, text, width, x, yFromBottom, onClick)
   return b
 end
 
+-- Tooltip explaining whether Join/Leave affect the whole guild or just this character.
+local function scopeTooltip(self, action)
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  if not IsInGuild() then
+    GameTooltip:AddLine(action .. " for this character.", 1, 1, 1)
+  elseif GA.GuildSync:IAmOfficer() then
+    GameTooltip:AddLine(action .. " for your whole guild.", 1, 0.82, 0)
+    GameTooltip:AddLine("You hold an officer rank, so guildmates running the addon pick this up on login.", 0.8, 0.8, 0.8, true)
+  else
+    GameTooltip:AddLine(action .. " for this character only.", 1, 1, 1)
+    GameTooltip:AddLine(string.format("Only guild ranks 0 to %d can set the alliance for the whole guild.", GA.settings.keyRankMax or 1), 0.8, 0.8, 0.8, true)
+  end
+  GameTooltip:Show()
+end
+
 local function makeEditBox(name, width, x, y, maxLetters)
   local eb = CreateFrame("EditBox", name, frame, "InputBoxTemplate")
   eb:SetWidth(width)
@@ -304,6 +324,8 @@ local function buildPanel()
   joinBtn:SetPoint("TOPLEFT", LIST_LEFT + 258, -108)
   joinBtn:SetText("Join")
   joinBtn:SetScript("OnClick", doJoin)
+  joinBtn:SetScript("OnEnter", function(self) scopeTooltip(self, "Join an alliance") end)
+  joinBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   -- Column headers
   local function header(text, x, width)
@@ -366,6 +388,8 @@ local function buildPanel()
   local refreshBtn = makeButton("GuildAllianceRefreshButton", "Refresh", 70, LIST_LEFT, 108, doRefresh)
   syncBtn  = makeButton("GuildAllianceSyncButton", "Sync", 60, LIST_LEFT + 72, 108, doSync)
   leaveBtn = makeButton("GuildAllianceLeaveButton", "Leave", 60, LIST_LEFT + 134, 108, doLeave)
+  leaveBtn:SetScript("OnEnter", function(self) scopeTooltip(self, "Leave the alliance") end)
+  leaveBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   onlineOnlyCheck = CreateFrame("CheckButton", "GuildAllianceOnlineOnlyCheck", frame, "UICheckButtonTemplate")
   onlineOnlyCheck:SetWidth(24)
@@ -466,5 +490,13 @@ function UI:Init()
   GA:On("ROSTER_CHANGED", function() UI:Refresh() end)
   GA:On("CHANNEL_JOINED", function() UI:Refresh() end)
   GA:On("CHANNEL_LEFT", function() UI:Refresh() end)
+  GA:On("ALLIANCE_CHANGED", function()
+    if UI:IsActive() then
+      local c = GA:CharDB()
+      keyBox:SetText(c.alliance and c.alliance.key or "")
+      pwBox:SetText(c.alliance and c.alliance.password or "")
+      UI:Refresh()
+    end
+  end)
   GA:Every(30, function() UI:Refresh() end)
 end

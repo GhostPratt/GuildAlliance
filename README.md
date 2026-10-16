@@ -40,12 +40,29 @@ already exceeds that. The addon keeps its own alliance roster instead, and offer
 
 Copy the `GuildAlliance` folder into `Interface\AddOns\`. Interface version 30300.
 
+## Forming an alliance
+
+1. The leaders of the guilds involved agree on a shared key and a password out of game.
+2. In each guild, one officer opens the Social frame (default key **O**), picks the
+   **Alliance** tab, enters the key and password and presses **Join**. Because they hold an
+   officer rank, this sets the alliance for their whole guild.
+3. Every other member with the addon receives the key automatically, at login or within a
+   few seconds if already online. Nothing to type.
+4. To change or dissolve the alliance, an officer presses **Join** with a new key or **Leave**.
+   Members follow automatically.
+
+"Officer" means guild rank index 0 or 1 by default (guild master and the next rank).
+Raise it with `/ga officers <n>`. Rank is verified against the client's own guild roster,
+so a regular member cannot re-key the guild. Members may still join a key manually; that
+is personal to the character and gets replaced the next time an officer sets one for the guild.
+
 ## Use
 
 Open the Social frame (default key **O**) and pick the **Alliance** tab next to Raid.
 
 - Type the key your allies agreed on, optionally a password, and press **Join**. The
   setting is saved per character and the channel is rejoined automatically on login.
+  Hover Join or Leave to see whether it applies to the whole guild or just you.
 - **Refresh** asks allied guilds to resend rosters. **Sync** broadcasts your own guild
   roster now. **Leave** drops out of the alliance.
 - Click a member to select them, then **Whisper**, **Invite** or **Add Friend**.
@@ -67,15 +84,15 @@ The same actions exist as slash commands:
 /ga friend <name>        add a player to your real friends list (50 slot cap)
 /ga forget <guild>       drop a guild's saved roster
 /ga who on|off           toggle /who polling
+/ga officers <rank>      highest rank index allowed to set the guild alliance
 /ga debug on|off         debug output
 ```
-
-Guild leaders agree on a key (and ideally a password) out of game, then each member joins
-once from the Alliance tab.
 
 ## Limits
 
 - Anyone who learns the key and password can join the channel. Use a password.
+- Key distribution inside a guild uses addon messages on the GUILD channel, which needs
+  the server's `AddonChannel` setting enabled (it is by default).
 - Chat messages are capped at 255 bytes, so a 300 member roster takes about 30 messages
   (roughly 20 seconds at the addon's send rate).
 - `/who` returns at most 49 results (`MaxWhoListReturns`), so very large allied guilds with

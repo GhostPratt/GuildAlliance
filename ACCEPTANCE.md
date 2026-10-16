@@ -20,6 +20,9 @@ character in guild B without the addon (a playerbot works) covers the no-addon c
 | 9 | Selection buttons: selecting a member enables Whisper, Invite and Add Friend. Whisper opens a tell, Invite sends a group invite, Add Friend adds them. With 50 friends, Add Friend refuses with a clear message instead of sending the request. | pending | |
 | 10 | Leaving: **Leave** leaves the channel, clears the key, and the channel is not rejoined after `/reload`. | pending | |
 | 11 | Wrong password: joining with a wrong password prints a clear message and stops retrying. | pending | |
+| 12 | Guild key pickup: an officer (rank 0 or 1) of guild B joins `testkey`. A guild B member with the addon and no key, already online, receives it within 15 s and connects; another guild B member who logs in afterwards has it filled in and connected within 20 s of entering the world. Status line shows "guild, set by <officer>". | pending | |
+| 13 | Rank enforcement: a guild B member of rank 2 or lower joins a different key. Other members keep the officer's key, and the member's own status line says "personal". | pending | |
+| 14 | Officer leave: the officer presses Leave. Online members of guild B drop out of the alliance within 15 s with a chat message naming the officer. | pending | |
 
 ## Verification log
 
