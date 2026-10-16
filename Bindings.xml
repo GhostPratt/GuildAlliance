@@ -1,0 +1,5 @@
+<Bindings>
+  <Binding name="GUILDALLIANCE_TOGGLE" header="GUILDALLIANCE">
+    GuildAlliance.UI:Toggle()
+  </Binding>
+</Bindings>

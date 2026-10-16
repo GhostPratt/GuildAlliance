@@ -1,0 +1,14 @@
+## Interface: 30300
+## Title: Guild Alliance
+## Notes: Alliances between guilds: shared rosters and online presence across allied guilds.
+## Author: Phillip Pratt
+## Version: 0.1.0
+## SavedVariables: GuildAllianceDB
+## X-Website: https://github.com/GhostPratt/GuildAlliance
+## X-Category: Guild
+
+Core.lua
+Comm.lua
+Roster.lua
+Presence.lua
+UI.lua

@@ -1,0 +1,10 @@
+# OS / editor
+Thumbs.db
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Build and tooling scratch
+node_modules/
+*.zip
