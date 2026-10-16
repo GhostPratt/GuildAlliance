@@ -42,8 +42,22 @@ Copy the `GuildAlliance` folder into `Interface\AddOns\`. Interface version 3030
 
 ## Use
 
+Open the Social frame (default key **O**) and pick the **Alliance** tab next to Raid.
+
+- Type the key your allies agreed on, optionally a password, and press **Join**. The
+  setting is saved per character and the channel is rejoined automatically on login.
+- **Refresh** asks allied guilds to resend rosters. **Sync** broadcasts your own guild
+  roster now. **Leave** drops out of the alliance.
+- Click a member to select them, then **Whisper**, **Invite** or **Add Friend**.
+  Double click whispers, right click invites.
+- **Online only** hides offline members.
+
+A key binding "Toggle alliance tab" is available under Guild Alliance in Key Bindings.
+
+The same actions exist as slash commands:
+
 ```
-/ga                      toggle the alliance window
+/ga                      open the Alliance tab
 /ga join <key> [pw]      join (or create) an alliance by shared key, optional password
 /ga leave                leave the alliance
 /ga status               channel and sync status
@@ -56,12 +70,8 @@ Copy the `GuildAlliance` folder into `Interface\AddOns\`. Interface version 3030
 /ga debug on|off         debug output
 ```
 
-Guild leaders agree on a key (and ideally a password) out of game, then each member runs
-`/ga join <key> <password>` once. The setting is saved per character and the channel is
-rejoined automatically on login.
-
-In the window: left click whispers, right click invites, shift click adds to friends.
-A key binding "Toggle alliance window" is available under Guild Alliance in Key Bindings.
+Guild leaders agree on a key (and ideally a password) out of game, then each member joins
+once from the Alliance tab.
 
 ## Limits
 

@@ -232,7 +232,8 @@ end
 -- Slash commands
 -------------------------------------------------------------------------------
 local HELP = {
-  "/ga                      toggle the alliance window",
+  "Everything below is also available from the Alliance tab on the Social (O) frame.",
+  "/ga                      open the Alliance tab",
   "/ga join <key> [pw]      join (or create) an alliance by shared key, optional password",
   "/ga leave                leave the alliance",
   "/ga status               show channel and sync status",
@@ -372,7 +373,7 @@ GA:RegisterEvent("PLAYER_LOGIN", function()
   if c.alliance and c.alliance.key then
     GA.Comm:Configure(c.alliance.key, c.alliance.password)
   end
-  GA:Print("v" .. GA.VERSION .. " loaded. Type /ga for commands.")
+  GA:Print("v" .. GA.VERSION .. " loaded. Open the Alliance tab on the Social frame (O), or type /ga help.")
 end)
 
 GA:RegisterEvent("PLAYER_ENTERING_WORLD", function()

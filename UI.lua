@@ -1,22 +1,34 @@
 -------------------------------------------------------------------------------
 -- GuildAlliance :: UI.lua
--- The alliance roster window: allied guild members, online first.
---   Left click   whisper        Right click  invite        Shift click  add friend
+-- An "Alliance" tab on the Social frame (FriendsFrame), beside Friends, Who,
+-- Guild and Raid. Everything the slash commands do is reachable from here.
+--
+--   Key / password boxes + Join   join or create an alliance
+--   Leave                         leave the alliance
+--   Refresh                       ask allies to resend rosters and presence
+--   Sync                          broadcast my guild roster now
+--   Whisper / Invite / Add Friend act on the selected member
+--   Online only                   filter the list
+--   Click a row to select it, double click to whisper, right click to invite.
 -------------------------------------------------------------------------------
 local GA = GuildAlliance
 local UI = {}
 GA.UI = UI
 
 BINDING_HEADER_GUILDALLIANCE = "Guild Alliance"
-BINDING_NAME_GUILDALLIANCE_TOGGLE = "Toggle alliance window"
+BINDING_NAME_GUILDALLIANCE_TOGGLE = "Toggle alliance tab"
 
-local ROWS, ROW_HEIGHT = 18, 16
-local LIST_TOP = -96
-local FRAME_WIDTH = 440
+UI.TAB_ID = 5
+local ROWS, ROW_HEIGHT = 14, 16
+local LIST_TOP = -146
+local LIST_LEFT = 22
+local LIST_WIDTH = 296
 
-local frame, scroll, statusText, onlineOnlyCheck
+local frame, scroll, statusLine1, statusLine2, onlineOnlyCheck, keyBox, pwBox
+local whisperBtn, inviteBtn, friendBtn, leaveBtn, syncBtn, tab
 local rows = {}
 local list = {}
+local selected = nil -- { name=, guild= }
 
 local function classColor(code)
   local file = GA.Roster.CODE_TO_CLASS[code]
@@ -65,16 +77,46 @@ end
 local function statusLabel(entry)
   if entry.online then return "|cff40ff40Online|r" end
   local ago = GA.Presence:LastSeenAgo(entry.guild, entry.m)
-  if ago then return "|cff808080" .. GA.FormatAgo(ago) .. " ago|r" end
+  if ago then return "|cff808080" .. GA.FormatAgo(ago) .. "|r" end
   return "|cff808080Offline|r"
+end
+
+local function isSelected(entry)
+  return selected and selected.name == entry.name and selected.guild == entry.guild
 end
 
 -------------------------------------------------------------------------------
 -- Rendering
 -------------------------------------------------------------------------------
+function UI:IsActive()
+  return frame and frame:IsShown()
+end
+
+function UI:UpdateButtons()
+  local Comm = GA.Comm
+  local c = GA:CharDB()
+  local hasAlliance = c.alliance and c.alliance.key
+  local hasSel = selected ~= nil
+  if hasSel then whisperBtn:Enable() else whisperBtn:Disable() end
+  if hasSel then inviteBtn:Enable() else inviteBtn:Disable() end
+  if hasSel then friendBtn:Enable() else friendBtn:Disable() end
+  if hasAlliance then leaveBtn:Enable() else leaveBtn:Disable() end
+  if Comm.joined then syncBtn:Enable() else syncBtn:Disable() end
+end
+
 function UI:Refresh()
-  if not frame or not frame:IsShown() then return end
+  if not self:IsActive() then return end
   self:BuildList()
+
+  -- Drop the selection if it fell out of the list (filter or roster change).
+  if selected then
+    local still = false
+    for _, e in ipairs(list) do
+      if isSelected(e) then still = true break end
+    end
+    if not still then selected = nil end
+  end
+
   FauxScrollFrame_Update(scroll, #list, ROWS, ROW_HEIGHT)
   local offset = FauxScrollFrame_GetOffset(scroll)
   for i = 1, ROWS do
@@ -82,18 +124,18 @@ function UI:Refresh()
     local entry = list[i + offset]
     if entry then
       local r, g, b = classColor(entry.m.class)
+      if not entry.online then r, g, b = r * 0.55, g * 0.55, b * 0.55 end
       row.name:SetText(entry.name)
       row.name:SetTextColor(r, g, b)
       row.level:SetText(entry.m.level > 0 and tostring(entry.m.level) or "")
       row.guild:SetText(entry.guild)
       row.status:SetText(statusLabel(entry))
-      if not entry.online then
-        row.name:SetTextColor(r * 0.55, g * 0.55, b * 0.55)
-      end
       row.entry = entry
+      if isSelected(entry) then row.selection:Show() else row.selection:Hide() end
       row:Show()
     else
       row.entry = nil
+      row.selection:Hide()
       row:Hide()
     end
   end
@@ -105,9 +147,44 @@ function UI:Refresh()
   local own = GA.Roster:OwnGuildName()
   for guild in pairs(GA.realm.guilds) do if guild ~= own then guilds = guilds + 1 end end
   for _, e in ipairs(list) do if e.online then online = online + 1 end end
-  local state = Comm.joined and "|cff40ff40connected|r" or (Comm.wantJoined and "|cffffff40joining|r" or "|cffff4040not joined|r")
-  statusText:SetText(string.format("Alliance: %s   %s   Allied guilds: %d   Online: %d   Addon users: %d",
-    c.alliance and c.alliance.key or "none", state, guilds, online, users))
+  local state = Comm.joined and "|cff40ff40connected|r"
+    or (Comm.wantJoined and "|cffffff40joining...|r" or "|cffff4040not connected|r")
+  if c.alliance and c.alliance.key then
+    statusLine1:SetText("Alliance |cffffffff" .. c.alliance.key .. "|r   " .. state)
+  else
+    statusLine1:SetText("No alliance. Enter the key your allies agreed on and press Join.")
+  end
+  statusLine2:SetText(string.format("Allied guilds: %d   Online: %d   Addon users in channel: %d", guilds, online, users))
+
+  self:UpdateButtons()
+end
+
+-------------------------------------------------------------------------------
+-- Row interaction
+-------------------------------------------------------------------------------
+local function whisper(name)
+  if ChatFrame_SendTell then
+    ChatFrame_SendTell(name)
+  else
+    ChatFrame_OpenChat("/w " .. name .. " ")
+  end
+end
+
+local function rowOnClick(self, button)
+  local e = self.entry
+  if not e then return end
+  if button == "RightButton" then
+    InviteUnit(e.name)
+    return
+  end
+  selected = { name = e.name, guild = e.guild }
+  PlaySound("igMainMenuOptionCheckBoxOn")
+  UI:Refresh()
+end
+
+local function rowOnDoubleClick(self, button)
+  local e = self.entry
+  if e and button == "LeftButton" then whisper(e.name) end
 end
 
 local function rowOnEnter(self)
@@ -128,102 +205,123 @@ local function rowOnEnter(self)
     GameTooltip:AddLine(ago and ("Last seen " .. GA.FormatAgo(ago) .. " ago") or "Offline", 0.6, 0.6, 0.6)
   end
   GameTooltip:AddLine(" ")
-  GameTooltip:AddLine("Left click: whisper   Right click: invite   Shift click: add friend", 0.5, 0.5, 0.5)
+  GameTooltip:AddLine("Click: select   Double click: whisper   Right click: invite", 0.5, 0.5, 0.5)
   GameTooltip:Show()
 end
 
-local function rowOnClick(self, button)
-  local e = self.entry
-  if not e then return end
-  if IsShiftKeyDown() then
-    GA:AddFriendSafe(e.name)
-  elseif button == "RightButton" then
-    InviteUnit(e.name)
-  else
-    if ChatFrame_SendTell then
-      ChatFrame_SendTell(e.name)
-    else
-      ChatFrame_OpenChat("/w " .. e.name .. " ")
-    end
+-------------------------------------------------------------------------------
+-- Button actions
+-------------------------------------------------------------------------------
+local function doJoin()
+  local key = GA.Trim(keyBox:GetText())
+  local pw = GA.Trim(pwBox:GetText())
+  if key == "" then
+    GA:Print("enter an alliance key first")
+    return
   end
+  keyBox:ClearFocus()
+  pwBox:ClearFocus()
+  GA:SetAlliance(key, pw ~= "" and pw or nil)
+  UI:Refresh()
+end
+
+local function doLeave()
+  GA:ClearAlliance()
+  keyBox:SetText("")
+  pwBox:SetText("")
+  UI:Refresh()
+end
+
+local function doRefresh()
+  if GA.Comm.joined then
+    GA.Roster:RequestRosters()
+    GA.Presence:RequestList()
+  end
+  UI:Refresh()
+end
+
+local function doSync()
+  if not GA.Comm.joined then return end
+  GA.Roster:BroadcastFull("manual")
+  GA.Roster:BroadcastPresence()
+  GA:Print("roster broadcast queued (" .. GA.Comm:QueueLength() .. " messages)")
 end
 
 -------------------------------------------------------------------------------
 -- Construction
 -------------------------------------------------------------------------------
-local function buildFrame()
-  frame = CreateFrame("Frame", "GuildAllianceFrame", UIParent)
-  frame:SetWidth(FRAME_WIDTH)
-  frame:SetHeight(ROWS * ROW_HEIGHT + 118)
-  frame:SetPoint("CENTER")
-  frame:SetFrameStrata("HIGH")
-  frame:SetToplevel(true)
-  frame:SetMovable(true)
-  frame:EnableMouse(true)
-  frame:SetClampedToScreen(true)
-  frame:RegisterForDrag("LeftButton")
-  frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-  frame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true, tileSize = 32, edgeSize = 32,
-    insets = { left = 11, right = 12, top = 12, bottom = 11 },
-  })
+local function makeButton(name, text, width, x, yFromBottom, onClick)
+  local b = CreateFrame("Button", name, frame, "UIPanelButtonTemplate")
+  b:SetWidth(width)
+  b:SetHeight(22)
+  b:SetPoint("BOTTOMLEFT", x, yFromBottom)
+  b:SetText(text)
+  b:SetScript("OnClick", onClick)
+  return b
+end
+
+local function makeEditBox(name, width, x, y, maxLetters)
+  local eb = CreateFrame("EditBox", name, frame, "InputBoxTemplate")
+  eb:SetWidth(width)
+  eb:SetHeight(20)
+  eb:SetPoint("TOPLEFT", x, y)
+  eb:SetAutoFocus(false)
+  eb:SetMaxLetters(maxLetters)
+  eb:SetScript("OnEnterPressed", doJoin)
+  eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  return eb
+end
+
+local function buildPanel()
+  frame = CreateFrame("Frame", "GuildAllianceFrame", FriendsFrame)
+  frame:SetAllPoints(FriendsFrame)
   frame:Hide()
-  tinsert(UISpecialFrames, "GuildAllianceFrame")
 
-  local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOP", 0, -16)
-  title:SetText("Guild Alliance")
+  statusLine1 = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  statusLine1:SetPoint("TOPLEFT", LIST_LEFT, -78)
+  statusLine1:SetWidth(LIST_WIDTH + 24)
+  statusLine1:SetJustifyH("LEFT")
 
-  local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
+  statusLine2 = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  statusLine2:SetPoint("TOPLEFT", LIST_LEFT, -92)
+  statusLine2:SetWidth(LIST_WIDTH + 24)
+  statusLine2:SetJustifyH("LEFT")
 
-  statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  statusText:SetPoint("TOPLEFT", 20, -38)
-  statusText:SetWidth(FRAME_WIDTH - 40)
-  statusText:SetJustifyH("LEFT")
+  -- Join row
+  local keyLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  keyLabel:SetPoint("TOPLEFT", LIST_LEFT, -113)
+  keyLabel:SetText("Key")
+  keyBox = makeEditBox("GuildAllianceKeyBox", 104, LIST_LEFT + 30, -109, 24)
 
-  onlineOnlyCheck = CreateFrame("CheckButton", "GuildAllianceOnlineOnlyCheck", frame, "UICheckButtonTemplate")
-  onlineOnlyCheck:SetWidth(24)
-  onlineOnlyCheck:SetHeight(24)
-  onlineOnlyCheck:SetPoint("TOPLEFT", 16, -54)
-  _G["GuildAllianceOnlineOnlyCheckText"]:SetText("Online only")
-  onlineOnlyCheck:SetScript("OnClick", function(self)
-    GA.settings.onlineOnly = self:GetChecked() and true or false
-    UI:Refresh()
-  end)
+  local pwLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  pwLabel:SetPoint("TOPLEFT", LIST_LEFT + 142, -113)
+  pwLabel:SetText("Pass")
+  pwBox = makeEditBox("GuildAlliancePasswordBox", 70, LIST_LEFT + 178, -109, 16)
 
-  local syncBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  syncBtn:SetWidth(80)
-  syncBtn:SetHeight(20)
-  syncBtn:SetPoint("TOPRIGHT", -30, -56)
-  syncBtn:SetText("Refresh")
-  syncBtn:SetScript("OnClick", function()
-    if GA.Comm.joined then
-      GA.Roster:RequestRosters()
-      GA.Presence:RequestList()
-    end
-    UI:Refresh()
-  end)
+  local joinBtn = CreateFrame("Button", "GuildAllianceJoinButton", frame, "UIPanelButtonTemplate")
+  joinBtn:SetWidth(60)
+  joinBtn:SetHeight(22)
+  joinBtn:SetPoint("TOPLEFT", LIST_LEFT + 258, -108)
+  joinBtn:SetText("Join")
+  joinBtn:SetScript("OnClick", doJoin)
 
+  -- Column headers
   local function header(text, x, width)
     local fs = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    fs:SetPoint("TOPLEFT", x, LIST_TOP + 14)
+    fs:SetPoint("TOPLEFT", LIST_LEFT + x, LIST_TOP + 13)
     fs:SetWidth(width)
     fs:SetJustifyH("LEFT")
     fs:SetText(text)
-    return fs
   end
-  header("Name", 22, 120)
-  header("Lvl", 146, 30)
-  header("Guild", 180, 140)
-  header("Status", 324, 80)
+  header("Name", 2, 110)
+  header("Lvl", 114, 28)
+  header("Guild", 144, 95)
+  header("Status", 241, 55)
 
+  -- List
   scroll = CreateFrame("ScrollFrame", "GuildAllianceScrollFrame", frame, "FauxScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", 16, LIST_TOP)
-  scroll:SetWidth(FRAME_WIDTH - 56)
+  scroll:SetPoint("TOPLEFT", LIST_LEFT, LIST_TOP)
+  scroll:SetWidth(LIST_WIDTH)
   scroll:SetHeight(ROWS * ROW_HEIGHT)
   scroll:SetScript("OnVerticalScroll", function(self, offset)
     FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, function() UI:Refresh() end)
@@ -232,47 +330,138 @@ local function buildFrame()
   for i = 1, ROWS do
     local row = CreateFrame("Button", "GuildAllianceRow" .. i, frame)
     row:SetHeight(ROW_HEIGHT)
-    row:SetWidth(FRAME_WIDTH - 60)
-    row:SetPoint("TOPLEFT", 20, LIST_TOP - (i - 1) * ROW_HEIGHT)
+    row:SetWidth(LIST_WIDTH)
+    row:SetPoint("TOPLEFT", LIST_LEFT, LIST_TOP - (i - 1) * ROW_HEIGHT)
     row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", rowOnClick)
+    row:SetScript("OnDoubleClick", rowOnDoubleClick)
     row:SetScript("OnEnter", rowOnEnter)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    local function col(x, width, justify)
+    row.selection = row:CreateTexture(nil, "BACKGROUND")
+    row.selection:SetAllPoints(row)
+    row.selection:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+    row.selection:SetBlendMode("ADD")
+    row.selection:SetVertexColor(1, 0.8, 0.2, 0.6)
+    row.selection:Hide()
+
+    local function col(x, width)
       local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
       fs:SetPoint("LEFT", x, 0)
       fs:SetWidth(width)
       fs:SetHeight(ROW_HEIGHT)
-      fs:SetJustifyH(justify or "LEFT")
+      fs:SetJustifyH("LEFT")
       return fs
     end
-    row.name   = col(2, 120)
-    row.level  = col(126, 30)
-    row.guild  = col(160, 140)
-    row.status = col(304, 80)
+    row.name   = col(2, 110)
+    row.level  = col(114, 28)
+    row.guild  = col(144, 95)
+    row.status = col(241, 55)
     row:Hide()
     rows[i] = row
   end
 
+  -- Bottom row B (upper): Refresh, Sync, Leave, Online only
+  local refreshBtn = makeButton("GuildAllianceRefreshButton", "Refresh", 70, LIST_LEFT, 108, doRefresh)
+  syncBtn  = makeButton("GuildAllianceSyncButton", "Sync", 60, LIST_LEFT + 72, 108, doSync)
+  leaveBtn = makeButton("GuildAllianceLeaveButton", "Leave", 60, LIST_LEFT + 134, 108, doLeave)
+
+  onlineOnlyCheck = CreateFrame("CheckButton", "GuildAllianceOnlineOnlyCheck", frame, "UICheckButtonTemplate")
+  onlineOnlyCheck:SetWidth(24)
+  onlineOnlyCheck:SetHeight(24)
+  onlineOnlyCheck:SetPoint("BOTTOMLEFT", LIST_LEFT + 200, 107)
+  _G["GuildAllianceOnlineOnlyCheckText"]:SetText("Online only")
+  onlineOnlyCheck:SetScript("OnClick", function(self)
+    GA.settings.onlineOnly = self:GetChecked() and true or false
+    UI:Refresh()
+  end)
+
+  -- Bottom row A (lower): act on the selected member
+  whisperBtn = makeButton("GuildAllianceWhisperButton", "Whisper", 100, LIST_LEFT, 84, function()
+    if selected then whisper(selected.name) end
+  end)
+  inviteBtn = makeButton("GuildAllianceInviteButton", "Invite", 100, LIST_LEFT + 102, 84, function()
+    if selected then InviteUnit(selected.name) end
+  end)
+  friendBtn = makeButton("GuildAllianceFriendButton", "Add Friend", 100, LIST_LEFT + 204, 84, function()
+    if selected then GA:AddFriendSafe(selected.name) end
+  end)
+
   frame:SetScript("OnShow", function()
+    local c = GA:CharDB()
+    keyBox:SetText(c.alliance and c.alliance.key or "")
+    pwBox:SetText(c.alliance and c.alliance.password or "")
     onlineOnlyCheck:SetChecked(GA.settings.onlineOnly)
+    UI:Refresh()
+  end)
+  frame:SetScript("OnHide", function()
+    keyBox:ClearFocus()
+    pwBox:ClearFocus()
+  end)
+end
+
+-- Fifth tab on the Social frame. FriendsFrame_Update knows nothing about tab 5,
+-- so a post-hook paints the frame art, title and shows our panel; registering
+-- the panel in FRIENDSFRAME_SUBFRAMES lets Blizzard's code hide it for other tabs.
+local function buildTab()
+  tab = CreateFrame("Button", "FriendsFrameTab" .. UI.TAB_ID, FriendsFrame, "CharacterFrameTabButtonTemplate")
+  tab:SetID(UI.TAB_ID)
+  tab:SetText("Alliance")
+  tab:SetPoint("LEFT", _G["FriendsFrameTab" .. (UI.TAB_ID - 1)], "RIGHT", -15, 0)
+  tab:SetScript("OnClick", function(self)
+    PanelTemplates_Tab_OnClick(self, FriendsFrame)
+    FriendsFrame_Update()
+    PlaySound("igCharacterInfoTab")
+  end)
+  PanelTemplates_TabResize(tab, 0)
+  PanelTemplates_SetNumTabs(FriendsFrame, UI.TAB_ID)
+  PanelTemplates_UpdateTabs(FriendsFrame)
+
+  if type(FRIENDSFRAME_SUBFRAMES) == "table" then
+    tinsert(FRIENDSFRAME_SUBFRAMES, "GuildAllianceFrame")
+  end
+
+  hooksecurefunc("FriendsFrame_Update", function()
+    if FriendsFrame.selectedTab ~= UI.TAB_ID then return end
+    FriendsFrameTopLeft:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-TopLeft")
+    FriendsFrameTopRight:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-TopRight")
+    FriendsFrameBottomLeft:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-BottomLeft")
+    FriendsFrameBottomRight:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-BottomRight")
+    FriendsFrameTitleText:SetText("Guild Alliance")
+    if FriendsTabHeader then FriendsTabHeader:Hide() end
+    if FriendsFrame_ShowSubFrame then
+      FriendsFrame_ShowSubFrame("GuildAllianceFrame")
+    else
+      frame:Show()
+    end
     UI:Refresh()
   end)
 end
 
+-------------------------------------------------------------------------------
+-- Public
+-------------------------------------------------------------------------------
 function UI:Toggle()
   if not frame then return end
-  if frame:IsShown() then
-    frame:Hide()
-  else
-    frame:Show()
+  if FriendsFrame:IsShown() and FriendsFrame.selectedTab == UI.TAB_ID then
+    HideUIPanel(FriendsFrame)
+    return
   end
+  if ToggleFriendsFrame then
+    ToggleFriendsFrame(UI.TAB_ID)
+  else
+    PanelTemplates_SetTab(FriendsFrame, UI.TAB_ID)
+    ShowUIPanel(FriendsFrame)
+  end
+  if FriendsFrame:IsShown() then FriendsFrame_Update() end
 end
 
 function UI:Init()
-  if not frame then buildFrame() end
+  if not frame then
+    buildPanel()
+    buildTab()
+  end
   GA:On("PRESENCE_CHANGED", function() UI:Refresh() end)
   GA:On("ROSTER_CHANGED", function() UI:Refresh() end)
   GA:On("CHANNEL_JOINED", function() UI:Refresh() end)
