@@ -102,7 +102,33 @@ end
 
 -------------------------------------------------------------------------------
 -- Who polling (for allied members who do not run the addon)
+--
+-- SetWhoToUI(1) is the only way to get results as data instead of chat text,
+-- but the default UI's WHO_LIST_UPDATE handler (WhoList_Update) then calls
+-- ShowUIPanel(FriendsFrame) and switches to the Who tab. So while one of our
+-- polls is in flight, FriendsFrame is unregistered from that event, and it is
+-- re-registered as soon as the result (or a timeout) arrives.
 -------------------------------------------------------------------------------
+local whoFrameMuted = false
+
+local function muteWhoFrame()
+  if whoFrameMuted or not FriendsFrame then return end
+  whoFrameMuted = true
+  FriendsFrame:UnregisterEvent("WHO_LIST_UPDATE")
+end
+
+local function unmuteWhoFrame()
+  if not whoFrameMuted then return end
+  whoFrameMuted = false
+  if FriendsFrame then FriendsFrame:RegisterEvent("WHO_LIST_UPDATE") end
+end
+
+function Presence:EndWho()
+  self.whoPending = nil
+  SetWhoToUI(0)
+  unmuteWhoFrame()
+end
+
 function Presence:WhoTick()
   if not GA.settings.whoPoll then return end
   local c = GA:CharDB()
@@ -116,14 +142,15 @@ function Presence:WhoTick()
   local guild = guilds[self.whoIndex]
   self.lastWhoAt = GetTime()
   self.whoPending = { guild = guild, at = GetTime() }
+  muteWhoFrame()
   SetWhoToUI(1)
   SendWho('g-"' .. guild .. '"')
   GA:Debug("who poll: " .. guild)
   GA:After(6, function()
     local p = Presence.whoPending
     if p and p.guild == guild and GetTime() - p.at >= 6 then
-      Presence.whoPending = nil
-      SetWhoToUI(0)
+      GA:Debug("who poll timed out: " .. guild)
+      Presence:EndWho()
     end
   end)
 end
@@ -131,8 +158,7 @@ end
 function Presence:OnWhoList()
   local p = self.whoPending
   if not p then return end
-  self.whoPending = nil
-  SetWhoToUI(0)
+  self:EndWho()
   local n = GetNumWhoResults()
   local set = {}
   for i = 1, n do

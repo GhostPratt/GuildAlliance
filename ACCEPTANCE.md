@@ -15,7 +15,7 @@ character in guild B without the addon (a playerbot works) covers the no-addon c
 | 4 | Full roster sync: within 60 s of both joining, A's panel lists every member of guild B (offline included) with level, class colour and rank in the tooltip. | pending | |
 | 5 | Presence changes: B logs out, A shows B offline within 30 s with a "last seen" time. B logs back in, A shows B online within 30 s. | pending | |
 | 6 | Persistence: after `/reload` and after a full relog, the key is still filled in, the channel is rejoined automatically, and known rosters are still listed before any new sync arrives. | pending | |
-| 7 | No-addon presence: a member of guild B who does not run the addon shows Online in A's panel within one who-poll interval (90 s) while online, and drops to offline after they log out. | pending | |
+| 7 | No-addon presence: a member of guild B who does not run the addon shows Online in A's panel within one who-poll interval (90 s) while online, and drops to offline after they log out. The Social frame never opens on its own while polling runs. | pending | |
 | 8 | Only one reporter per guild: with two addon users in guild B online, `/ga status` shows `reporter: true` on exactly one of them, and A receives one roster broadcast, not two. | pending | |
 | 9 | Selection buttons: selecting a member enables Whisper, Invite and Add Friend. Whisper opens a tell, Invite sends a group invite, Add Friend adds them. With 50 friends, Add Friend refuses with a clear message instead of sending the request. | pending | |
 | 10 | Leaving: **Leave** leaves the channel, clears the key, and the channel is not rejoined after `/reload`. | pending | |
