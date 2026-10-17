@@ -203,10 +203,9 @@ end
 
 -------------------------------------------------------------------------------
 -- Alliance chat: the same channel doubles as a chat channel for allies.
--- Anything a person types on it is shown like normal channel chat (labelled
--- "N. Alliance"); protocol lines, join/leave spam and notices stay hidden.
+-- Anything a person types on it is shown like normal channel chat; protocol
+-- lines, join/leave spam and notices stay hidden.
 -------------------------------------------------------------------------------
-Comm.CHAT_LABEL = "Alliance"
 local chatAnnouncedFor = nil
 
 local function chatFrames()
@@ -245,8 +244,22 @@ end
 -- unless the player already has it on some frame (they may have moved it).
 function Comm:AttachChat()
   if not GA.settings.allianceChat or not self.channelName then return end
-  if #self:ChatFramesWithChannel() == 0 and ChatFrame_AddChannel then
-    ChatFrame_AddChannel(DEFAULT_CHAT_FRAME, self.channelName)
+  if #self:ChatFramesWithChannel() == 0 then
+    local frame = DEFAULT_CHAT_FRAME
+    if ChatFrame_AddChannel then ChatFrame_AddChannel(frame, self.channelName) end
+    if #self:ChatFramesWithChannel() == 0 then
+      -- AddChatWindowChannel declined (it can for temporary channels). The
+      -- message handler only consults frame.channelList, so fill it directly.
+      frame.channelList = frame.channelList or {}
+      frame.zoneChannelList = frame.zoneChannelList or {}
+      local i = 1
+      while frame.channelList[i] do i = i + 1 end
+      frame.channelList[i] = self.channelName
+      frame.zoneChannelList[i] = 0
+      GA:Debug("attached alliance chat to " .. frame:GetName() .. " manually")
+    else
+      GA:Debug("attached alliance chat to " .. frame:GetName())
+    end
   end
   local id = self:ChannelNumber()
   if id and chatAnnouncedFor ~= self.channelName then
@@ -301,16 +314,9 @@ local function chatFilter(...)
     if event ~= "CHAT_MSG_CHANNEL" or isProtocol(text) or not GA.settings.allianceChat then
       return true
     end
-    -- A person talking: show it, relabelled "N. Alliance" so the channel's
-    -- real name (the key) is not printed in chat.
-    if offset == 2 and type(chanString) == "string" then
-      local num = chanString:match("^(%d+)%.")
-      if num then
-        local a = { select(3, ...) }
-        a[4] = num .. ". " .. Comm.CHAT_LABEL
-        return false, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]
-      end
-    end
+    -- A person talking: let the chat frame show it as normal channel chat.
+    -- (Do not shorten arg4 here: ChatFrame_MessageEventHandler only shows a
+    -- channel message when strlen(arg4) > strlen(channel name).)
     return false
   end
   -- Channel list replies do not always carry the channel name; hide them while

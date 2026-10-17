@@ -23,7 +23,7 @@ character in guild B without the addon (a playerbot works) covers the no-addon c
 | 12 | Guild key pickup: an officer (rank 0 or 1) of guild B joins `testkey`. A guild B member with the addon and no key, already online, receives it within 15 s and connects; another guild B member who logs in afterwards has it filled in and connected within 20 s of entering the world. Status line shows "guild, set by <officer>". | pending | |
 | 13 | Rank enforcement: a guild B member of rank 2 or lower joins a different key. Other members keep the officer's key, and the member's own status line says "personal". | pending | |
 | 14 | Officer leave: the officer presses Leave. Online members of guild B drop out of the alliance within 15 s with a chat message naming the officer. | pending | |
-| 15 | Alliance chat: with A and B connected, A types `/N hello` (N from the status line) and B types `/gac hi`. Both messages appear in both players' main chat window as `[N. Alliance] Name: ...`, while roster sync traffic and join/leave notices stay hidden. `/ga chat off` removes the channel from chat and rosters keep syncing; `/ga chat on` brings it back. After Leave the channel is gone from the chat window. | pending | |
+| 15 | Alliance chat: with A and B connected, A types `/N hello` (N from the status line) and B types `/gac hi`. Both messages appear in both players' main chat window as `[N. GA<key>] Name: ...`, while roster sync traffic and join/leave notices stay hidden. `/ga chat off` removes the channel from chat and rosters keep syncing; `/ga chat on` brings it back. After Leave the channel is gone from the chat window. | pending | |
 
 ## Verification log
 

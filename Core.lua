@@ -291,9 +291,12 @@ function GA:ShowStatus()
   local key = c.alliance and c.alliance.key or "(none)"
   local state = Comm.joined and "joined" or (Comm.wantJoined and "joining" or "not joined")
   local num = Comm:ChannelNumber()
-  self:Print(string.format("alliance key: %s   channel: %s%s   state: %s   chat: %s", key,
+  local frames = {}
+  for _, f in ipairs(Comm:ChatFramesWithChannel()) do frames[#frames + 1] = f:GetName() end
+  self:Print(string.format("alliance key: %s   channel: %s%s   state: %s   chat: %s (%s)", key,
     tostring(Comm.channelName or "-"), num and (" (/" .. num .. ")") or "", state,
-    self.settings.allianceChat and "on" or "off"))
+    self.settings.allianceChat and "on" or "off",
+    #frames > 0 and ("shown in " .. table.concat(frames, ", ")) or "not shown in any chat window"))
   if c.alliance then
     self:Print(string.format("set by %s (%s); my rank %s, officer: %s",
       tostring(c.allianceSetBy), c.allianceFromGuild and "for the guild" or "personal",

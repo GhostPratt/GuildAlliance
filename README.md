@@ -27,7 +27,7 @@ channel. The reporter is the alphabetically first addon user from that guild who
 ### Alliance chat
 
 The same channel doubles as a chat channel for everyone in the alliance. It is attached to
-your main chat window as **N. Alliance** (the number is shown in the Alliance tab and in the
+your main chat window under its channel name, `GA` plus the key (the number is shown in the Alliance tab and in the
 login message), so `/N hello` or `/gac hello` reaches every ally running the addon. Protocol
 traffic, join and leave notices and channel lists are never shown. `/ga chat off` hides the
 channel from chat entirely while keeping roster sync working.
