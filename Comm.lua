@@ -27,6 +27,11 @@ local queue, lastSend = {}, 0
 local retryPending = false
 local lower = string.lower
 
+-- Protocol lines start with "GA1;"; anything else on the channel is a person talking.
+local function isProtocol(text)
+  return type(text) == "string" and text:sub(1, #GA.PROTOCOL + 1) == GA.PROTOCOL .. ";"
+end
+
 -------------------------------------------------------------------------------
 -- Channel identity
 -------------------------------------------------------------------------------
@@ -83,6 +88,7 @@ end
 
 function Comm:Leave()
   self.wantJoined = false
+  self:DetachChat()
   if self.channelName then
     local id = GetChannelName(self.channelName)
     if id and id > 0 then LeaveChannelByName(self.channelName) end
@@ -103,6 +109,9 @@ function Comm:OnJoined()
     -- for everyone else is filtered out.
     SetChannelPassword(self.channelName, self.password)
   end
+  -- The channel number is assigned by the client slightly after the join
+  -- notice; attach the chat frame once it is known.
+  GA:After(1, function() if self.joined then self:AttachChat() end end)
   GA:Fire("CHANNEL_JOINED")
 end
 
@@ -180,8 +189,8 @@ end
 function Comm:OnChannelMessage(text, sender, chanString, chanBase)
   if not self:IsOurChannel(chanString, chanBase) then return end
   if type(text) ~= "string" then return end
+  if not isProtocol(text) then return end -- alliance chat, shown by the chat frame
   local fields = GA.Split(text, ";")
-  if fields[1] ~= GA.PROTOCOL then return end
   local op = fields[2]
   local handler = self.handlers[op]
   if not handler then
@@ -193,9 +202,86 @@ function Comm:OnChannelMessage(text, sender, chanString, chanBase)
 end
 
 -------------------------------------------------------------------------------
--- Chat frame filters: hide anything about our channel from every chat frame.
--- 3.3.x passes (frame, event, arg1, ...) to filters; older clients passed
--- (arg1, ...). Detect which and offset accordingly.
+-- Alliance chat: the same channel doubles as a chat channel for allies.
+-- Anything a person types on it is shown like normal channel chat (labelled
+-- "N. Alliance"); protocol lines, join/leave spam and notices stay hidden.
+-------------------------------------------------------------------------------
+Comm.CHAT_LABEL = "Alliance"
+local chatAnnouncedFor = nil
+
+local function chatFrames()
+  local list = {}
+  for i = 1, (NUM_CHAT_WINDOWS or 10) do
+    local f = _G["ChatFrame" .. i]
+    if f then list[#list + 1] = f end
+  end
+  return list
+end
+
+-- Chat frames that currently display our channel.
+function Comm:ChatFramesWithChannel()
+  local out = {}
+  if not self.channelName then return out end
+  local want = lower(self.channelName)
+  for _, f in ipairs(chatFrames()) do
+    for _, name in pairs(f.channelList or {}) do
+      if type(name) == "string" and lower(name) == want then
+        out[#out + 1] = f
+        break
+      end
+    end
+  end
+  return out
+end
+
+function Comm:ChannelNumber()
+  if not self.channelName then return nil end
+  local id = GetChannelName(self.channelName)
+  if id and id > 0 then return id end
+  return nil
+end
+
+-- Called once the channel is joined. Attaches it to the default chat frame
+-- unless the player already has it on some frame (they may have moved it).
+function Comm:AttachChat()
+  if not GA.settings.allianceChat or not self.channelName then return end
+  if #self:ChatFramesWithChannel() == 0 and ChatFrame_AddChannel then
+    ChatFrame_AddChannel(DEFAULT_CHAT_FRAME, self.channelName)
+  end
+  local id = self:ChannelNumber()
+  if id and chatAnnouncedFor ~= self.channelName then
+    chatAnnouncedFor = self.channelName
+    GA:Print(string.format("alliance chat is channel %d: type /%d <message> or /gac <message> to talk to your allies.", id, id))
+    GA:Fire("PRESENCE_CHANGED") -- refresh the tab so it shows the channel number
+  end
+end
+
+function Comm:DetachChat()
+  if not self.channelName or not ChatFrame_RemoveChannel then return end
+  for _, f in ipairs(self:ChatFramesWithChannel()) do
+    ChatFrame_RemoveChannel(f, self.channelName)
+  end
+  chatAnnouncedFor = nil
+end
+
+-- Send a human message to allies (not protocol traffic).
+function Comm:SendChat(text)
+  text = GA.Trim(tostring(text or ""))
+  if text == "" then return false end
+  local id = self.joined and self:ChannelNumber()
+  if not id then
+    GA:Print("not connected to an alliance channel")
+    return false
+  end
+  if isProtocol(text) then return false end
+  SendChatMessage(text:sub(1, 255), "CHANNEL", nil, id)
+  return true
+end
+
+-------------------------------------------------------------------------------
+-- Chat frame filters. 3.3.x passes (frame, event, arg1, ...) to filters and
+-- lets them return (false, newarg1, ...) to rewrite the message; older clients
+-- passed (arg1, ...) and only honour true/false. Detect which and offset.
 -------------------------------------------------------------------------------
 local FILTER_EVENTS = {
   "CHAT_MSG_CHANNEL", "CHAT_MSG_CHANNEL_NOTICE", "CHAT_MSG_CHANNEL_NOTICE_USER",
@@ -208,9 +294,25 @@ local function chatFilter(...)
     offset = 2
     event = select(2, ...)
   end
+  local text       = select(1 + offset, ...)
   local chanString = select(4 + offset, ...)
   local chanBase   = select(9 + offset, ...)
-  if Comm:IsOurChannel(chanString, chanBase) then return true end
+  if Comm:IsOurChannel(chanString, chanBase) then
+    if event ~= "CHAT_MSG_CHANNEL" or isProtocol(text) or not GA.settings.allianceChat then
+      return true
+    end
+    -- A person talking: show it, relabelled "N. Alliance" so the channel's
+    -- real name (the key) is not printed in chat.
+    if offset == 2 and type(chanString) == "string" then
+      local num = chanString:match("^(%d+)%.")
+      if num then
+        local a = { select(3, ...) }
+        a[4] = num .. ". " .. Comm.CHAT_LABEL
+        return false, a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]
+      end
+    end
+    return false
+  end
   -- Channel list replies do not always carry the channel name; hide them while
   -- we have a list request in flight.
   if event == "CHAT_MSG_CHANNEL_LIST" and GA.Presence and GA.Presence:ListPending() then

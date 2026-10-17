@@ -24,6 +24,14 @@ Presence comes from four sources, strongest first:
 Only one client per guild broadcasts, so an alliance of large guilds does not flood the
 channel. The reporter is the alphabetically first addon user from that guild who is online.
 
+### Alliance chat
+
+The same channel doubles as a chat channel for everyone in the alliance. It is attached to
+your main chat window as **N. Alliance** (the number is shown in the Alliance tab and in the
+login message), so `/N hello` or `/gac hello` reaches every ally running the addon. Protocol
+traffic, join and leave notices and channel lists are never shown. `/ga chat off` hides the
+channel from chat entirely while keeping roster sync working.
+
 ### Why not SendAddonMessage?
 
 AzerothCore only accepts addon messages on PARTY, RAID, GUILD, BATTLEGROUND and WHISPER
@@ -68,6 +76,8 @@ Open the Social frame (default key **O**) and pick the **Alliance** tab next to 
 - Click a member to select them, then **Whisper**, **Invite** or **Add Friend**.
   Double click whispers, right click invites.
 - **Online only** hides offline members.
+- The status line shows the alliance chat channel number, for example **Chat: /5**.
+  Type `/5 <message>` or `/gac <message>` to talk to allies.
 
 A key binding "Toggle alliance tab" is available under Guild Alliance in Key Bindings.
 
@@ -83,6 +93,8 @@ The same actions exist as slash commands:
 /ga request              ask allied guilds to resend their rosters
 /ga friend <name>        add a player to your real friends list (50 slot cap)
 /ga forget <guild>       drop a guild's saved roster
+/gac <message>           talk to your allies on the alliance channel
+/ga chat on|off          show or hide the alliance channel in chat
 /ga who on|off           toggle /who polling
 /ga officers <rank>      highest rank index allowed to set the guild alliance
 /ga debug on|off         debug output

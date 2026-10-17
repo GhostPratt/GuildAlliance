@@ -16,6 +16,7 @@ local DEFAULT_SETTINGS = {
   whoInterval = 90,    -- seconds between who polls (one allied guild per poll)
   onlineOnly  = false, -- window filter
   keyRankMax  = 1,     -- guild rank index at or below which a member may set the guild's alliance (0 = GM)
+  allianceChat = true, -- show the alliance channel in chat so allies can talk (protocol traffic stays hidden)
 }
 
 -------------------------------------------------------------------------------
@@ -270,6 +271,8 @@ local HELP = {
   "/ga request              ask allied guilds to resend their rosters",
   "/ga friend <name>        add a player to your real friends list (50 slot cap)",
   "/ga forget <guild>       drop a guild's saved roster",
+  "/gac <message>           talk to your allies on the alliance channel",
+  "/ga chat on|off          show or hide the alliance channel in chat",
   "/ga who on|off           toggle /who polling for members without the addon",
   "/ga officers <rank>      highest rank index allowed to set the guild alliance (0 = GM, default 1)",
   "/ga debug on|off         toggle debug output",
@@ -287,7 +290,10 @@ function GA:ShowStatus()
   local c = self:CharDB()
   local key = c.alliance and c.alliance.key or "(none)"
   local state = Comm.joined and "joined" or (Comm.wantJoined and "joining" or "not joined")
-  self:Print(string.format("alliance key: %s   channel: %s   state: %s", key, tostring(Comm.channelName or "-"), state))
+  local num = Comm:ChannelNumber()
+  self:Print(string.format("alliance key: %s   channel: %s%s   state: %s   chat: %s", key,
+    tostring(Comm.channelName or "-"), num and (" (/" .. num .. ")") or "", state,
+    self.settings.allianceChat and "on" or "off"))
   if c.alliance then
     self:Print(string.format("set by %s (%s); my rank %s, officer: %s",
       tostring(c.allianceSetBy), c.allianceFromGuild and "for the guild" or "personal",
@@ -366,6 +372,15 @@ function GA:HandleSlash(msg)
     else
       self:Print("no roster stored for '" .. rest .. "'")
     end
+  elseif cmd == "chat" then
+    if rest == "on" then
+      self.settings.allianceChat = true
+      if self.Comm.joined then self.Comm:AttachChat() end
+    elseif rest == "off" then
+      self.settings.allianceChat = false
+      self.Comm:DetachChat()
+    end
+    self:Print("alliance chat is " .. (self.settings.allianceChat and "on" or "off"))
   elseif cmd == "who" then
     if rest == "on" then
       self.settings.whoPoll = true
@@ -396,6 +411,15 @@ end
 SLASH_GUILDALLIANCE1 = "/ga"
 SLASH_GUILDALLIANCE2 = "/guildalliance"
 SlashCmdList["GUILDALLIANCE"] = function(msg) GA:HandleSlash(msg) end
+
+SLASH_GUILDALLIANCECHAT1 = "/gac"
+SlashCmdList["GUILDALLIANCECHAT"] = function(msg)
+  if GA.Trim(tostring(msg or "")) == "" then
+    GA:Print("usage: /gac <message>")
+    return
+  end
+  GA.Comm:SendChat(msg)
+end
 
 -------------------------------------------------------------------------------
 -- Startup

@@ -159,7 +159,9 @@ function UI:Refresh()
   else
     statusLine1:SetText("No alliance. Your guild's officers can set one; it arrives automatically at login.")
   end
-  statusLine2:SetText(string.format("Allied guilds: %d   Online: %d   Addon users in channel: %d", guilds, online, users))
+  local num = Comm.joined and GA.settings.allianceChat and Comm:ChannelNumber()
+  statusLine2:SetText(string.format("Allied guilds: %d   Online: %d   Addon users in channel: %d%s",
+    guilds, online, users, num and ("   Chat: |cffffffff/" .. num .. "|r") or ""))
 
   self:UpdateButtons()
 end
